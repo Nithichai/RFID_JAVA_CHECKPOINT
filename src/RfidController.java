@@ -110,44 +110,21 @@ public class RfidController implements GetReadData {
 		}
 		return false;
 	}
-	
-	private long maxTime = 0;
-	private int ant;
-	private long antStart = 0;
+
 	public void getReadData(String data, int antNo) {
-		if (antNo != ant) {
-			System.out.println("Antenna " + ant + " time read : " + String.valueOf((System.nanoTime() - antStart)/1000));
-			ant = antNo;
-			antStart = System.nanoTime();
-		}
-		long start = System.nanoTime();
-		if ("F0".equals(data)) {
-			System.out.println("Antenna 1 finished inventory");
-		}else if ("F1".equals(data)) {
-			System.out.println("Antenna 2 finished inventory");
-		}else if ("F2".equals(data)) {
-			System.out.println("Antenna 3 finished inventory");
-		}else if ("F3".equals(data)) {
-			System.out.println("Antenna 4 finished inventory");
-		}else if(!"".equals(data)){
-			System.out.println(data + "  antenna" + antNo);
+		if(!"".equals(data) && !data.startsWith("F")){
 			Date date = new Date();
 			SimpleDateFormat format = new SimpleDateFormat("yyy-MM-dd HH:mm:ss");
 			String time = format.format(date);
 			String boxSelected = FrameGUI.comboBox.getSelectedItem().toString();
-			if (!boxSelected.equals("Reader1")) {
-				data = data.substring(0, data.length()-8);
+			if (!boxSelected.equals("Reader1") && data.length() > 30) {
+				data = data.substring(0, data.length()-14);
+			}else{
+				data = data.substring(0, data.length()-6);
 			}
 			all_data.put(data, new Wrapper(time, reader, String.valueOf(antNo)));
 			database.put_data(data, time, reader);
-			long t = (System.nanoTime() - start) / 1000;
-			if (t > maxTime) {
-				maxTime = t;
-//				System.out.println("Antenna read " + data + " : " + String.valueOf(t));
-			}
-//			System.out.println("Antenna read " + data + " : " + String.valueOf(maxTime));
 		}
-		
 	}
 	
 	public void convertJson() throws IOException, JSONException{
