@@ -1,15 +1,17 @@
 import java.io.FileWriter;
 import java.io.IOException;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.text.SimpleDateFormat;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 
-import com.jlrfid.service.AntStruct;
 import com.jlrfid.service.GetReadData;
 import com.jlrfid.service.MainHandler;
 import com.jlrfid.service.RFIDException;
 
+import org.apache.commons.net.ntp.NTPUDPClient;
+import org.apache.commons.net.ntp.TimeInfo;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -20,14 +22,15 @@ public class RfidController implements GetReadData {
 	private int baudrate, port;
 	private boolean isConnect;
 	private boolean isLoop;
-//	private boolean isStart;
 	private byte[] antEnable = new byte[4];
-	private String r2KPath = System.getProperty("user.dir") + "\\lib\\R2k.dll";
+	private String r2KPath = System.getProperty("user.dir") + "\\R2k.dll";
+//	private String r2KPath = "R2k.dll";
 	
 	private static String reader;
-	
 	public static Database database = new Database();
 	public static Map<String, Wrapper> all_data = new HashMap<String, Wrapper>();
+	public boolean isThreadNTP;
+	public static String ntpTime;
 
 	public boolean connectRFID(String ip, int baudrate, int port) {
 		MainHandler handler = new MainHandler();
@@ -43,32 +46,19 @@ public class RfidController implements GetReadData {
 		return false;
 	}
 	
-	public void disconnect() {
+	public void disconnect() throws RFIDException {
 		MainHandler handler = new MainHandler();
+		handler.StopInv();
 		if(handler.dllInit(r2KPath)){
 			if(handler.deviceInit(ip, baudrate, port)){
-				handler.StopInv();
-			}
-		}
-	}
-	
-	public boolean getAntenna(int index) throws RFIDException{
-		MainHandler handler = new MainHandler();
-		if(handler.dllInit(r2KPath)){
-			if(handler.deviceInit(ip, baudrate, port)){
-				AntStruct struct = handler.GetAnt();
-				for(int i=0; i<4; i++){
-					System.out.println(
-							"antenna" + (i+1) 
-							+ (struct.antEnable[i]==1 ? "connected":"disconnected") 
-							+ "work time:" + struct.dwellTime[i] 
-							+ "power:" + struct.power[i].longValue()/10 +"dBm"
-					);
+				for(int index = 0; index < 4; index++){
+					if(antEnable[index]==1){
+						setAntenna(false, index);
+					}
 				}
+				handler.deviceDisconnect();
 			}
-			return false;
 		}
-		return true;
 	}
 	
 	public boolean setAntenna(boolean isSelected, int index) throws RFIDException {
@@ -80,19 +70,15 @@ public class RfidController implements GetReadData {
 				else
 					antEnable[index] = 0;
 				long[] dwellTime = new long[] {20, 20, 20, 20};
-				long[] power = new long[] {300, 300, 300, 300};
-				if(handler.SetAnt(antEnable,dwellTime,power)){
-					System.out.println("succeed to set antenna parameter");
-				}else{
-					System.out.println("failed to set antenna parameter");
-				}
+				long[] power = new long[] {330, 330, 330, 330};
+				handler.SetAnt(antEnable,dwellTime,power);
 				return true;
 			}
 		}
 		return false;
 	}
 	
-	public boolean setStart(boolean isSelected) throws RFIDException {
+	public boolean setStart(boolean isSelected) throws RFIDException, Exception {
 		MainHandler handler = new MainHandler();
 		if(handler.dllInit(r2KPath)){
 			if(handler.deviceInit(ip, baudrate, port)){
@@ -111,19 +97,20 @@ public class RfidController implements GetReadData {
 		return false;
 	}
 
-	public void getReadData(String data, int antNo) {
+	public void set_guntime(int type) throws Exception{
+		database.ntp_time(ntpTime, type);	
+	}
+	
+	public void getReadData(String data, int antNo){
 		if(!"".equals(data) && !data.startsWith("F")){
-			Date date = new Date();
-			SimpleDateFormat format = new SimpleDateFormat("yyy-MM-dd HH:mm:ss");
-			String time = format.format(date);
 			String boxSelected = FrameGUI.comboBox.getSelectedItem().toString();
 			if (!boxSelected.equals("Reader1") && data.length() > 30) {
 				data = data.substring(0, data.length()-14);
 			}else{
 				data = data.substring(0, data.length()-6);
 			}
-			all_data.put(data, new Wrapper(time, reader, String.valueOf(antNo)));
-			database.put_data(data, time, reader);
+			all_data.put(data, new Wrapper(ntpTime, reader, String.valueOf(antNo)));
+			database.put_data(data, ntpTime, reader);
 		}
 	}
 	
@@ -146,13 +133,14 @@ public class RfidController implements GetReadData {
 	
 	public String[][] getTable() {
 		int tableColSize = 5;
-		String[][] dataList = new String[all_data.keySet().size()][tableColSize];
-		for (int i = 0; i < all_data.keySet().size(); i++){
+		String[][] dataList = new String[Database.get_database.size()][tableColSize];
+		for (int i = 0; i < Database.get_database.size(); i++){
 			String[] colList = new String[tableColSize];
-			Object key = all_data.keySet().toArray()[i];			
+			Object key = Database.get_database.keySet().toArray()[i];			
+			Wrapper_database wrapper_database = Database.get_database.get(key);
 			Wrapper wrapper = all_data.get(key);
-			String time  = wrapper.time;
-			String read = wrapper.reader;
+			String time  = wrapper_database.time;
+			String read = wrapper_database.reader;
 			String antNo = wrapper.antno;
 			colList[0] = String.valueOf(i+1);
 			colList[1] = String.valueOf(time);
@@ -168,6 +156,34 @@ public class RfidController implements GetReadData {
 		all_data = new HashMap<String, Wrapper>();
 	}
 	
+	public void get_time() {
+		Runnable runnable = new Runnable () {
+			@Override
+			public void run() {
+				isThreadNTP = true;
+				try {
+					String TIME_SERVER = "time.navy.mi.th";   
+					NTPUDPClient timeClient = new NTPUDPClient();
+					InetAddress inetAddress = InetAddress.getByName(TIME_SERVER);
+					TimeInfo timeInfo = timeClient.getTime(inetAddress);
+					long returnTime = timeInfo.getReturnTime();
+					SimpleDateFormat format = new SimpleDateFormat("yyy-MM-dd HH:mm:ss");
+					ntpTime = format.format(returnTime);
+					System.out.println(ntpTime);
+					Thread.sleep(800);
+				} catch (UnknownHostException e) {
+					e.printStackTrace();
+				} catch (IOException e) {
+					e.printStackTrace();
+				} catch (InterruptedException e) {
+					e.printStackTrace();
+				}
+				isThreadNTP = false;
+			}
+		};
+		new Thread(runnable).start();
+	}
+	
 	public boolean isConnect() {
 		return isConnect;
 	}
@@ -175,10 +191,6 @@ public class RfidController implements GetReadData {
 	public boolean isLoop() {
 		return isLoop;
 	}
-	
-//	public boolean isStart() {
-//		return isStart;
-//	}
 	
 	public String getReader() {
 		return reader;
@@ -191,5 +203,4 @@ public class RfidController implements GetReadData {
 	public void setOnceLoop(boolean isSelected) {
 		isLoop = isSelected;
 	}
-	
 }

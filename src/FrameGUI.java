@@ -1,5 +1,3 @@
-
-
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.WindowAdapter;
@@ -22,6 +20,7 @@ import com.jlrfid.service.RFIDException;
 
 import javax.swing.JTable;
 import javax.swing.JScrollPane;
+import javax.swing.DefaultComboBoxModel;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
 
@@ -33,6 +32,9 @@ public class FrameGUI extends Thread {
 	private JTextField portTextField;
 	private JTable dataTable;
 	private JLabel ipLabel;
+	public static JTextField serverTextField; 
+	private JLabel statusLabel;
+	private JLabel serverLabel;
 	private JToggleButton connectToggle;
 	private JLabel antennaLabel;
 	private JCheckBox antenna1Box;
@@ -47,15 +49,17 @@ public class FrameGUI extends Thread {
 	private JScrollPane scrollPane;
 	private String[] readerList = {"Reader1", "Reader2", "Reader3"};
 	public static JComboBox<Object> comboBox;
+	public static JComboBox<Object> eventComboBox;
+	private Database  db = new Database();
 	
 	private RfidController rfidCtrl;
+	private String[] eventCombo = new String[0];
 	
 	public static void main(String[] args){
 		FrameGUI window = new FrameGUI();
 		window.rfidFrame.setVisible(true);
 		window.start();
 	}
-	
 
 	@Override
 	public void run() {
@@ -64,7 +68,7 @@ public class FrameGUI extends Thread {
 				update();
 				Thread.sleep(1);
 			} catch (Exception e){
-//				e.printStackTrace();	
+				
 			}
 		}
 	}
@@ -77,7 +81,6 @@ public class FrameGUI extends Thread {
 
 	private void initialize() {
 		rfidCtrl.setReader(readerList[0]);
-		System.out.println(readerList[0]);
 		rfidFrame = new JFrame();
 		rfidFrame.setTitle("RFID CONTROLLER");
 		rfidFrame.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
@@ -89,30 +92,34 @@ public class FrameGUI extends Thread {
 		            JOptionPane.YES_NO_OPTION);
 		        if (reply == JOptionPane.YES_OPTION){      	
 		        	if (startToggle.isSelected()) {
-		        		rfidCtrl.disconnect();
+		        		try {
+							rfidCtrl.disconnect();
+						} catch (RFIDException e) {
+							e.printStackTrace();
+						}
 		        	}
 		        	rfidFrame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 		        }
 		    }
 		});
-		rfidFrame.setBounds(100, 100, 800, 490);
+		rfidFrame.setBounds(100, 100, 806, 510);
 
 		rfidFrame.setResizable(false);
 		
 		ipLabel = new JLabel("IP");
-		ipLabel.setBounds(15, 15, 25, 25);
+		ipLabel.setBounds(10, 10, 25, 25);
 		
 		ipTextField = new JTextField();
 		ipTextField.setText("192.168.1.201");
-		ipTextField.setBounds(45, 15, 120, 25);
+		ipTextField.setBounds(40, 10, 135, 25);
 		ipTextField.setColumns(10);
 		
 		portLabel = new JLabel("Port");
-		portLabel.setBounds(15, 45, 25, 25);
+		portLabel.setBounds(10, 40, 25, 25);
 		
 		portTextField = new JTextField();
 		portTextField.setText("20058");
-		portTextField.setBounds(45, 45, 120, 25);
+		portTextField.setBounds(40, 40, 135, 25);
 		portTextField.setColumns(10);
 		rfidFrame.getContentPane().setLayout(null);
 		rfidFrame.getContentPane().add(ipLabel);
@@ -124,7 +131,7 @@ public class FrameGUI extends Thread {
 		connectToggle.addActionListener(new ActionListener() {
 			@Override
 			public void actionPerformed(ActionEvent e) {
-				if (connectToggle.isSelected()) {
+				if (connectToggle.isSelected()){
 					boolean isConnect = rfidCtrl.connectRFID(
 							String.valueOf(ipTextField.getText()), 
 							0, 
@@ -138,19 +145,47 @@ public class FrameGUI extends Thread {
 					} else {
 						setControllerEnable(true);
 						connectToggle.setText("Disconnect");
+						eventCombo = db.get_event();
+						if (eventCombo.length > 0) {
+							eventComboBox.setModel(new DefaultComboBoxModel<Object>(eventCombo));
+							eventComboBox.setSelectedIndex(0);
+						}
 					}
 				} else {
 					connectToggle.setText("Connect");
 					setControllerEnable(false);
-					rfidCtrl.disconnect();
+					antenna1Box.setSelected(false);
+					antenna2Box.setSelected(false);
+					antenna3Box.setSelected(false);
+					antenna4Box.setSelected(false);
+					try {
+						rfidCtrl.disconnect();
+					} catch (RFIDException e1) {
+						// TODO Auto-generated catch block
+						e1.printStackTrace();
+					}
+					Database.status_server = "Not Connected !!!";
 				}
 			}
 		});
-		connectToggle.setBounds(15, 75, 150, 25);
+		
+		connectToggle.setBounds(15, 100, 150, 25);
 		rfidFrame.getContentPane().add(connectToggle);
 		
+		serverLabel = new JLabel("DB");
+		serverLabel.setBounds(10, 70, 25, 25);
+		
+		serverTextField = new JTextField();
+		serverTextField.setText("http://alumni.eng.kmutnb.ac.th:7777");
+		serverTextField.setBounds(40, 70, 135, 25);
+		serverTextField.setColumns(10);
+		
+		rfidFrame.getContentPane().setLayout(null);
+		rfidFrame.getContentPane().add(serverLabel);
+		rfidFrame.getContentPane().add(serverTextField);
+		
 		comboBox = new JComboBox<Object> (readerList);
-		comboBox.setBounds(15, 410, 150, 25);
+		comboBox.setBounds(10, 415, 175, 25);
 		comboBox.addActionListener(new ActionListener() {
 			@Override
 			public void actionPerformed(ActionEvent arg0) {
@@ -159,8 +194,18 @@ public class FrameGUI extends Thread {
 		});
 		rfidFrame.getContentPane().add(comboBox);
 		
+		eventComboBox = new JComboBox<Object> (eventCombo);
+		eventComboBox.setBounds(10, 445, 175, 25);
+		eventComboBox.addActionListener(new ActionListener() {
+			@Override
+			public void actionPerformed(ActionEvent arg0) {
+				db.setEvent(db.eventIDList[eventComboBox.getSelectedIndex()]);
+			}
+		});
+		rfidFrame.getContentPane().add(eventComboBox);
+		
 		antennaLabel = new JLabel("Antenna");
-		antennaLabel.setBounds(15, 110, 150, 25);
+		antennaLabel.setBounds(10, 129, 150, 25);
 		rfidFrame.getContentPane().add(antennaLabel);
 		
 		antenna1Box = new JCheckBox("Antenna 1");
@@ -175,7 +220,7 @@ public class FrameGUI extends Thread {
 			}
 		});
 		antenna1Box.setHorizontalAlignment(SwingConstants.CENTER);
-		antenna1Box.setBounds(15, 140, 150, 25);
+		antenna1Box.setBounds(10, 149, 150, 25);
 		rfidFrame.getContentPane().add(antenna1Box);
 		
 		antenna2Box = new JCheckBox("Antenna 2");
@@ -190,7 +235,7 @@ public class FrameGUI extends Thread {
 			}
 		});
 		antenna2Box.setHorizontalAlignment(SwingConstants.CENTER);
-		antenna2Box.setBounds(15, 170, 150, 25);
+		antenna2Box.setBounds(10, 179, 150, 25);
 		rfidFrame.getContentPane().add(antenna2Box);
 		
 		antenna3Box = new JCheckBox("Antenna 3");
@@ -205,7 +250,7 @@ public class FrameGUI extends Thread {
 			}
 		});
 		antenna3Box.setHorizontalAlignment(SwingConstants.CENTER);
-		antenna3Box.setBounds(15, 200, 150, 25);
+		antenna3Box.setBounds(10, 209, 150, 25);
 		rfidFrame.getContentPane().add(antenna3Box);
 		
 		antenna4Box = new JCheckBox("Antenna 4");
@@ -220,7 +265,7 @@ public class FrameGUI extends Thread {
 			}
 		});
 		antenna4Box.setHorizontalAlignment(SwingConstants.CENTER);
-		antenna4Box.setBounds(15, 230, 150, 25);
+		antenna4Box.setBounds(10, 239, 150, 25);
 		rfidFrame.getContentPane().add(antenna4Box);
 		
 		readCtrlLabel = new JLabel("Read Controller");
@@ -239,10 +284,10 @@ public class FrameGUI extends Thread {
 				rfidCtrl.setOnceLoop(onceLoopToggle.isSelected());
 			}
 		});
-		onceLoopToggle.setBounds(15, 290, 150, 25);
+		onceLoopToggle.setBounds(10, 295, 175, 25);
 		rfidFrame.getContentPane().add(onceLoopToggle);
 		
-		startToggle = new JToggleButton("Start");
+		startToggle = new JToggleButton("Start Antenna");
 		startToggle.addActionListener(new ActionListener() {
 			@Override
 			public void actionPerformed(ActionEvent e) {
@@ -257,14 +302,16 @@ public class FrameGUI extends Thread {
 					rfidCtrl.setStart(startToggle.isSelected());
 				} catch (RFIDException e1) {
 					e1.printStackTrace();
+				} catch (Exception e1) {
+					e1.printStackTrace();
 				}
 			}
 		});
-		startToggle.setBounds(15, 320, 150, 25);
+		startToggle.setBounds(10, 325, 175, 25);
 		rfidFrame.getContentPane().add(startToggle);
 		
 		resetButton = new JButton("Reset");
-		resetButton.setBounds(15, 350, 150, 25);
+		resetButton.setBounds(10, 355, 175, 25);
 		resetButton.addActionListener(new ActionListener() {
 			@Override
 			public void actionPerformed(ActionEvent arg0) {
@@ -274,7 +321,7 @@ public class FrameGUI extends Thread {
 		rfidFrame.getContentPane().add(resetButton);
 		
 		saveButton = new JButton("Save File");
-		saveButton.setBounds(15, 380, 150, 25);
+		saveButton.setBounds(10, 385, 175, 25);
 		saveButton.addActionListener(new ActionListener() {
 			@Override
 			public void actionPerformed(ActionEvent arg0) {
@@ -290,6 +337,10 @@ public class FrameGUI extends Thread {
 			}
 		});
 		rfidFrame.getContentPane().add(saveButton);
+		
+		statusLabel = new JLabel("Server Status  :  " + Database.status_server);
+		statusLabel.setBounds(205, 445, 500, 25);
+		rfidFrame.getContentPane().add(statusLabel);
 		
 		String[][] tableData = null;
 		String[] tableHeader = {"No.", "Time", "Tag_ID", "Reader", "Antenna"};
@@ -311,13 +362,43 @@ public class FrameGUI extends Thread {
 		dataTable.getColumnModel().getColumn(0).setCellRenderer(centerRenderer);
 		dataTable.getColumnModel().getColumn(3).setCellRenderer(centerRenderer);
 		scrollPane = new JScrollPane();
-		scrollPane.setBounds(184, 0, 598, 433);
+		scrollPane.setBounds(196, 8, 598, 440);
 		rfidFrame.getContentPane().add(scrollPane);
 		scrollPane.setViewportView(dataTable);
+		
+		JButton fiveButton = new JButton("5 Km");
+		fiveButton.addActionListener(new ActionListener() {
+			@Override
+			public void actionPerformed(ActionEvent arg0) {
+				try {
+					rfidCtrl.set_guntime(1);
+				} catch (Exception e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+			}
+		});
+		fiveButton.setBounds(10, 271, 78, 23);
+		rfidFrame.getContentPane().add(fiveButton);
+		
+		JButton twelveButton = new JButton("12.7 Km");
+		twelveButton.addActionListener(new ActionListener() {
+			@Override
+			public void actionPerformed(ActionEvent arg0) {
+				try {
+					rfidCtrl.set_guntime(2);
+				} catch (Exception e) {
+					e.printStackTrace();
+				}
+			}
+		});
+		twelveButton.setBounds(98, 271, 87, 23);
+		rfidFrame.getContentPane().add(twelveButton);
 	}
 	
 	private boolean isMakeTable;
 	public void update() {
+		statusLabel.setText("Server Status  :  " + Database.status_server);
 		if (!isMakeTable) {
 			updateTable();
 		}
@@ -328,6 +409,9 @@ public class FrameGUI extends Thread {
 				e.printStackTrace();
 			}
 		}
+		if (!rfidCtrl.isThreadNTP) {
+			rfidCtrl.get_time();
+		}
 	}
 	
 	private void updateTable() {
@@ -337,13 +421,16 @@ public class FrameGUI extends Thread {
 				isMakeTable = true;
 				String[][] tableData = rfidCtrl.getTable();
 				DefaultTableModel model = (DefaultTableModel)dataTable.getModel();
-				if (tableData.length != model.getRowCount()) {
-					model.setRowCount(tableData.length);
-					for (int i = 0; i < tableData.length; i++) {
-						for (int j = 0; j < tableData[i].length; j++) {
-							model.setValueAt(tableData[i][j], i, j);
-						}
+				model.setRowCount(tableData.length);
+				for (int i = 0; i < tableData.length; i++) {
+					for (int j = 0; j < tableData[i].length; j++) {
+						model.setValueAt(tableData[i][j], i, j);
 					}
+				}
+				try {
+					Thread.sleep(1000);
+				} catch (InterruptedException e) {
+					e.printStackTrace();
 				}
 				isMakeTable = false;
 			}
@@ -355,6 +442,7 @@ public class FrameGUI extends Thread {
 	private void setControllerEnable(boolean enable) {
 		ipTextField.setEnabled(!enable);
 		portTextField.setEnabled(!enable);
+		serverTextField.setEnabled(!enable);
 		antenna1Box.setEnabled(enable);
 		antenna2Box.setEnabled(enable);
 		antenna3Box.setEnabled(enable);
